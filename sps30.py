@@ -2,7 +2,8 @@ from i2c import *
 import struct
 from enum import Enum
 
-class SPS30():
+
+class SPS30:
     # CONSTANTS
     _ADDR = 0x69
 
@@ -43,10 +44,8 @@ class SPS30():
                         "typical": None  # [um]- for float/[nm] - for uint
                    }
 
-
     def __init__(self, i2c: I2C):
         self._i2c = i2c
-
 
     def _calculateCRC(self, input):
         crc = 0xFF
@@ -60,7 +59,6 @@ class SPS30():
         crc = crc & 0x0000FF
         return crc
 
-
     def _checkCRC(self, result):
         for i in range(2, len(result), 3):
             data = []
@@ -69,10 +67,9 @@ class SPS30():
 
             crc = result[i]
 
-            if crc != _calculateCRC(data):
+            if crc != self._calculateCRC(data):
                 return False
         return True
-
 
     def read_device_serial(self):
         device_serial = []
@@ -86,8 +83,7 @@ class SPS30():
                 device_serial.append(chr(buf[i - 1]))
             return str("".join(device_serial))
         else:
-            return self.SERIAL_NUMBER_ERROR
-
+            return self._SERIAL_NUMBER_ERROR
 
     def start_measurement(self, type: meas_type):
         self.chosen_meas_type = type
@@ -101,15 +97,13 @@ class SPS30():
 
         byte_arr.append(0x00)
 
-        crc = calculateCRC(byte_arr[2:4])
+        crc = self._calculateCRC(byte_arr[2:4])
         byte_arr.append(crc)
 
         self._i2c.write(self._ADDR, byte_arr)
 
-
     def stop_measurement(self):
         self._i2c.write(self._ADDR, self._STOP_MEAS)
-
 
     def read_measured_values(self):
         if self.chosen_meas_type == -1:
@@ -127,19 +121,19 @@ class SPS30():
                 bytes_to_read = 30
         byte_array = self._i2c.read(self._ADDR, bytes_to_read)
 
-        if checkCRC(result):
+        if self._checkCRC(byte_array):
             self._calculate_sensor_values(byte_array)
-            return self.NO_ERROR
+            return self._NO_ERROR
         else:
-            return self.MEASURED_VALUES_ERROR
-
+            return self._MEASURED_VALUES_ERROR
 
     def _calculate_sensor_values(self, input):
         match self.chosen_meas_type:
             case self.meas_type.IEEE754_TYPE:
                 i = 4
                 for d in self.dict_output:
-                    value = input[i] + input[i - 1] * pow(2, 8) + input[i - 3] * pow(2, 16) + input[i - 4] * pow(2, 24) #value is in IEEE 754 (sign, exponent and mantissa) format which needs to be parsed before writing
+                    # value is in IEEE 754 (sign, exponent and mantissa) format which needs to be parsed before writing
+                    value = input[i] + input[i - 1] * pow(2, 8) + input[i - 3] * pow(2, 16) + input[i - 4] * pow(2, 24)
                     self.dict_output[d] = self._parse_IEEE754_to_float(value)
                     i += 6
             case self.meas_type.UINT_TYPE:
@@ -149,13 +143,11 @@ class SPS30():
                     self.dict_output[d] = value
                     i += 3
 
-
-    def _parse_IEEE754_to_float(value):
+    def _parse_IEEE754_to_float(self, value):
         string_value = str(hex(value)).replace("0x", "")
         byte_value = bytes.fromhex(string_value)
         return struct.unpack('>f', byte_value)[0]
 
-
-    def access_measuered_values(self):
+    def access_measured_values(self):
         # returns values as dictionary
-        return dict_output
+        return self.dict_output
