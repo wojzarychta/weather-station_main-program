@@ -26,31 +26,33 @@ class SPS30:
     _DATA_READY_FLAG_ERROR = -4
     _MEASURED_VALUES_ERROR = -5
 
-    class meas_type(Enum):
+    class MeasType(Enum):
         IEEE754_TYPE = 0
         UINT_TYPE = 1
 
     chosen_meas_type = -1
 
-    dict_output = {"pm1p0": None,  # [ug/m3]
-                        "pm2p5": None,  # [ug/m3]
-                        "pm4p0": None,  # [ug/m3]
-                        "pm10p0": None,  # [ug/m3]
-                        "nc0p5": None,  # [#/cm3]
-                        "nc1p0": None,  # [#/cm3]
-                        "nc2p5": None,  # [#/cm3]
-                        "nc4p0": None,  # [#/cm3]
-                        "nc10p0": None,  # [#/cm3]
-                        "typical": None  # [um]- for float/[nm] - for uint
+    dict_output = {"pm1p0": None,   # [ug/m3]
+                   "pm2p5": None,   # [ug/m3]
+                   "pm4p0": None,   # [ug/m3]
+                   "pm10p0": None,  # [ug/m3]
+                   "nc0p5": None,   # [#/cm3]
+                   "nc1p0": None,   # [#/cm3]
+                   "nc2p5": None,   # [#/cm3]
+                   "nc4p0": None,   # [#/cm3]
+                   "nc10p0": None,  # [#/cm3]
+                   "typical": None  # [um]- for float/[nm] - for uint
                    }
 
     def __init__(self, i2c: I2C):
         self._i2c = i2c
 
-    def _calculateCRC(self, input):
+    @staticmethod
+    def _calculateCRC(two_bytes):
+        # checksum calculated according to sensiron's datasheet
         crc = 0xFF
         for i in range(0, 2):
-            crc = crc ^ input[i]
+            crc = crc ^ two_bytes[i]
             for j in range(8, 0, -1):
                 if crc & 0x80:
                     crc = (crc << 1) ^ 0x31
@@ -61,12 +63,8 @@ class SPS30:
 
     def _checkCRC(self, result):
         for i in range(2, len(result), 3):
-            data = []
-            data.append(result[i - 2])
-            data.append(result[i - 1])
-
+            data = [result[i - 2], result[i - 1]]
             crc = result[i]
-
             if crc != self._calculateCRC(data):
                 return False
         return True
@@ -85,14 +83,14 @@ class SPS30:
         else:
             return self._SERIAL_NUMBER_ERROR
 
-    def start_measurement(self, type: meas_type):
-        self.chosen_meas_type = type
+    def start_measurement(self, out_format: MeasType):
+        self.chosen_meas_type = out_format
 
         byte_arr = self._START_MEAS
-        match type:
-            case self.meas_type.IEEE754_TYPE:
+        match out_format:
+            case self.MeasType.IEEE754_TYPE:
                 byte_arr.append(0x03)
-            case self.meas_type.UINT_TYPE:
+            case self.MeasType.UINT_TYPE:
                 byte_arr.append(0x05)
 
         byte_arr.append(0x00)
@@ -109,15 +107,13 @@ class SPS30:
         if self.chosen_meas_type == -1:
             raise Exception("Trying to read values before start of measurement")
 
-        byte_array = []
-
         self._i2c.write(self._ADDR, self._READ_VALUES)
 
         bytes_to_read = 0
         match self.chosen_meas_type:
-            case self.meas_type.IEEE754_TYPE:
+            case self.MeasType.IEEE754_TYPE:
                 bytes_to_read = 60
-            case self.meas_type.UINT_TYPE:
+            case self.MeasType.UINT_TYPE:
                 bytes_to_read = 30
         byte_array = self._i2c.read(self._ADDR, bytes_to_read)
 
@@ -127,27 +123,43 @@ class SPS30:
         else:
             return self._MEASURED_VALUES_ERROR
 
-    def _calculate_sensor_values(self, input):
+    def _calculate_sensor_values(self, byte_arr):
         match self.chosen_meas_type:
-            case self.meas_type.IEEE754_TYPE:
+            case self.MeasType.IEEE754_TYPE:
                 i = 4
                 for d in self.dict_output:
                     # value is in IEEE 754 (sign, exponent and mantissa) format which needs to be parsed before writing
-                    value = input[i] + input[i - 1] * pow(2, 8) + input[i - 3] * pow(2, 16) + input[i - 4] * pow(2, 24)
+                    value = byte_arr[i] + byte_arr[i - 1] * pow(2, 8) + \
+                            byte_arr[i - 3] * pow(2, 16) + byte_arr[i - 4] * pow(2, 24)
                     self.dict_output[d] = self._parse_IEEE754_to_float(value)
                     i += 6
-            case self.meas_type.UINT_TYPE:
+            case self.MeasType.UINT_TYPE:
                 i = 1
                 for d in self.dict_output:
-                    value = input[i] + input[i - 1] * pow(2, 8)
+                    value = byte_arr[i] + byte_arr[i - 1] * pow(2, 8)
                     self.dict_output[d] = value
                     i += 3
 
-    def _parse_IEEE754_to_float(self, value):
+    @staticmethod
+    def _parse_IEEE754_to_float(value):
         string_value = str(hex(value)).replace("0x", "")
         byte_value = bytes.fromhex(string_value)
         return struct.unpack('>f', byte_value)[0]
 
     def access_measured_values(self):
-        # returns values as dictionary
+        # returns dictionary
         return self.dict_output
+
+    def read_data_ready_flag(self):
+        # check if data is ready to read in synchronous mode
+        # if so, return 1, else 0 or DATA_READY_FLAG_ERROR in case of wrong CRC
+        self._i2c.write(self._ADDR, self._READ_DATA_RDY_FLAG)
+        byte_arr = self._i2c.read(self._ADDR, 3)
+        if self._checkCRC(byte_arr):
+            # flag is stored in first byte of the returned array
+            return byte_arr[1]
+        else:
+            return self._DATA_READY_FLAG_ERROR
+
+    #def sleep(self):
+    #def wake-up(self):
