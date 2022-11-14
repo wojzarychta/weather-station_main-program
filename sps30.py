@@ -25,6 +25,7 @@ class SPS30:
     _AUTO_CLN_INTERVAL_ERROR = -3
     _DATA_READY_FLAG_ERROR = -4
     _MEASURED_VALUES_ERROR = -5
+    _VERSION_ERROR = -5
 
     class MeasType(Enum):
         IEEE754_TYPE = 0
@@ -82,6 +83,15 @@ class SPS30:
             return str("".join(device_serial))
         else:
             return self._SERIAL_NUMBER_ERROR
+
+    def read_firmware_ver(self):
+        self._i2c.write(self._ADDR, self._READ_VERSION)
+        buf = self._i2c.read(self._ADDR, 3)
+
+        if self._checkCRC(buf):
+            return buf[0]+"."+buf[1]
+        else:
+            return self._VERSION_ERROR
 
     def start_measurement(self, out_format: MeasType):
         self.chosen_meas_type = out_format
@@ -163,3 +173,4 @@ class SPS30:
 
     #def sleep(self):
     #def wake-up(self):
+    #def start_fan_cleaning(self):

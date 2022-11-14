@@ -1,11 +1,5 @@
 # from smbus2 import *
 
-#------SPG40---------
-# SPG40_ADDR = 0x59
-# SPG40_MEAS_RAW = 0x260F
-# SPG40_MEAS_TEST = 0x280E
-# SPG40_HEATER_OFF = 0x3615
-# SPG40_MEAS_PARAM_WO_HUMIDITY = 0x8000A2666693
 
 class I2C:
 
