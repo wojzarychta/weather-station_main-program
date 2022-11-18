@@ -1,4 +1,4 @@
-# from smbus2 import *
+#from smbus2 import *
 
 
 class I2C:
@@ -27,3 +27,11 @@ class I2C:
         for b in num_of_bytes:
             result = result * 256 + int(b)
         return result
+
+    def write_to_reg(self, address: int, reg: int, value: int):
+        # self.bus.write_byte_data(address, reg, value)
+        pass
+
+    def write_byte(self, address: int, value: int):
+        # self.bus.write_byte(address, value)
+        pass

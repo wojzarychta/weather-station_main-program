@@ -13,7 +13,7 @@ class SPS30:
     _READ_VALUES = [0x03, 0x00]
     _SLEEP = [0x10, 0x01]
     _WAKE_UP = [0x11, 0x03]
-    _CLEAR_FAN = [0x56, 0x07]
+    _CLEAN_FAN = [0x56, 0x07]
     _RESET = [0xD3, 0x04]
     _READ_PRODUCT_TYPE = [0xD0, 0x02]
     _READ_SERIAL_NUMBER = [0xD0, 0x33]
@@ -89,7 +89,7 @@ class SPS30:
         buf = self._i2c.read(self._ADDR, 3)
 
         if self._checkCRC(buf):
-            return buf[0]+"."+buf[1]
+            return buf[0] + "." + buf[1]
         else:
             return self._VERSION_ERROR
 
@@ -97,11 +97,10 @@ class SPS30:
         self.chosen_meas_type = out_format
 
         byte_arr = self._START_MEAS
-        match out_format:
-            case self.MeasType.IEEE754_TYPE:
-                byte_arr.append(0x03)
-            case self.MeasType.UINT_TYPE:
-                byte_arr.append(0x05)
+        if out_format == self.MeasType.IEEE754_TYPE:
+            byte_arr.append(0x03)
+        elif out_format == self.MeasType.UINT_TYPE:
+            byte_arr.append(0x05)
 
         byte_arr.append(0x00)
 
@@ -120,11 +119,10 @@ class SPS30:
         self._i2c.write(self._ADDR, self._READ_VALUES)
 
         bytes_to_read = 0
-        match self.chosen_meas_type:
-            case self.MeasType.IEEE754_TYPE:
-                bytes_to_read = 60
-            case self.MeasType.UINT_TYPE:
-                bytes_to_read = 30
+        if self.chosen_meas_type == self.MeasType.IEEE754_TYPE:
+            bytes_to_read = 60
+        elif self.chosen_meas_type == self.MeasType.UINT_TYPE:
+            bytes_to_read = 30
         byte_array = self._i2c.read(self._ADDR, bytes_to_read)
 
         if self._checkCRC(byte_array):
@@ -134,21 +132,20 @@ class SPS30:
             return self._MEASURED_VALUES_ERROR
 
     def _calculate_sensor_values(self, byte_arr):
-        match self.chosen_meas_type:
-            case self.MeasType.IEEE754_TYPE:
-                i = 4
-                for d in self.dict_output:
-                    # value is in IEEE 754 (sign, exponent and mantissa) format which needs to be parsed before writing
-                    value = byte_arr[i] + byte_arr[i - 1] * pow(2, 8) + \
-                            byte_arr[i - 3] * pow(2, 16) + byte_arr[i - 4] * pow(2, 24)
-                    self.dict_output[d] = self._parse_IEEE754_to_float(value)
-                    i += 6
-            case self.MeasType.UINT_TYPE:
-                i = 1
-                for d in self.dict_output:
-                    value = byte_arr[i] + byte_arr[i - 1] * pow(2, 8)
-                    self.dict_output[d] = value
-                    i += 3
+        if self.chosen_meas_type == self.MeasType.IEEE754_TYPE:
+            i = 4
+            for d in self.dict_output:
+                # value is in IEEE 754 (sign, exponent and mantissa) format which needs to be parsed before writing
+                value = byte_arr[i] + byte_arr[i - 1] * pow(2, 8) + \
+                        byte_arr[i - 3] * pow(2, 16) + byte_arr[i - 4] * pow(2, 24)
+                self.dict_output[d] = self._parse_IEEE754_to_float(value)
+                i += 6
+        elif self.chosen_meas_type == self.MeasType.UINT_TYPE:
+            i = 1
+            for d in self.dict_output:
+                value = byte_arr[i] + byte_arr[i - 1] * pow(2, 8)
+                self.dict_output[d] = value
+                i += 3
 
     @staticmethod
     def _parse_IEEE754_to_float(value):
@@ -171,6 +168,16 @@ class SPS30:
         else:
             return self._DATA_READY_FLAG_ERROR
 
-    #def sleep(self):
-    #def wake-up(self):
-    #def start_fan_cleaning(self):
+    def wake_up(self):
+        # in order to wake send wake-up cmd 2 times
+        for i in range(2):
+            self._i2c.write(self._ADDR, self._WAKE_UP)
+
+    def sleep(self):
+        self._i2c.write(self._ADDR, self._SLEEP)
+
+    def start_fan_cleaning(self):
+        self._i2c.write(self._ADDR, self._CLEAN_FAN)
+
+    def device_reset(self):
+        self._i2c.write(self._ADDR, self._RESET)
