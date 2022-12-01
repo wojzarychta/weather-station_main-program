@@ -4,7 +4,7 @@
 class I2C:
 
     def __init__(self, port):
-        # self.bus = SMBus(port)
+        #self.bus = SMBus(port)
         pass
 
     def write(self, address: int, buf: list):
@@ -12,8 +12,7 @@ class I2C:
         # self.bus.i2c_rdwr(w)
         pass
 
-    @staticmethod
-    def read(address: int, bytes_to_read: int):
+    def read(self, address: int, bytes_to_read: int):
         result = []
         # r = i2c_msg.read(address, bytes_to_read)
         # self.bus.i2c_rdwr(r)
@@ -21,8 +20,7 @@ class I2C:
         #     result.append(self._bytes_to_int(r.buf[i]))
         return result
 
-    @staticmethod
-    def _bytes_to_int(num_of_bytes):
+    def _bytes_to_int(self, num_of_bytes):
         result = 0
         for b in num_of_bytes:
             result = result * 256 + int(b)
