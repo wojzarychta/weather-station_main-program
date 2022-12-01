@@ -1,7 +1,7 @@
 from i2c import *
 
 
-#Bme280 doesn't support auto-incrementing in writing mode!
+# Bme280 doesn't support auto-incrementing in writing mode!
 class BME280:
     # CONSTANTS
     _ADDR = 0x77  # or 0x78!
@@ -36,6 +36,7 @@ class BME280:
         self._i2c.write_to_reg(self._ADDR, self._RESET_REG, self._RESET)
 
     def measure(self):
+        # returns dictionary with all measurements
         registers = self._burst_read()
         temp_reg = registers[3:6]
         press_reg = registers[:3]
@@ -55,14 +56,28 @@ class BME280:
 
     def _burst_read(self):
         # returns content of registers from 0xF7 to 0xFE
-        pass
+        self._i2c.write(self._ADDR, [0xF7])
+        buf = self._i2c.read(self._ADDR, 8)
+        return buf
 
     def _read_trimming_param(self):
         # returns content of trimming registers from 0x88 to 0xA1 and from 0xE1 to 0xE6
-        pass
+        self._i2c.write(self._ADDR, [0x88])
+        buf = self._i2c.read(self._ADDR, 25)
 
-    def read_meas(self):
-        pass
+        self._i2c.write(self._ADDR, [0xE1])
+        buf.append(self._i2c.read(self._ADDR, 6))
+
+        trim_reg = []
+        for i in range(12):
+            trim_reg[i] = buf[2*i] + buf[2*i + 1] * pow(2, 8)
+        trim_reg[12] = buf[24]
+        trim_reg[13] = buf[25] + buf[26] * pow(2, 8)
+        trim_reg[14] = buf[27]
+        trim_reg[15] = buf[28] * pow(2, 4) + (buf[29] & 0x0F)
+        trim_reg[16] = buf[30] * pow(2, 4) + (buf[29] >> 4)
+
+        return trim_reg
 
     def _compensate_temp(self, adc_t, dig_t):
         # compensates and returns temperature in DegC, resolution is 0.01 DegC
