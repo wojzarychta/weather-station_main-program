@@ -35,16 +35,16 @@ class SPS30:
 
     chosen_meas_type = -1
 
-    dict_output = {"mass concentration PM1.0 [ug/m3]": None,
-                   "mass concentration PM2.5 [ug/m3]": None,
-                   "mass concentration PM4 [ug/m3]": None,
-                   "mass concentration PM10 [ug/m3]": None,
-                   "number concentration PM0.5 [#/cm3]": None,
-                   "number concentration PM1.0 [#/cm3]": None,
-                   "number concentration PM2.5 [#/cm3]": None,
-                   "number concentration PM4 [#/cm3]": None,
-                   "number concentration PM10 [#/cm3]": None,
-                   "typical particle size": None  # [um]- for float/[nm] - for uint
+    dict_output = {"mass concentration PM1.0 [ug/m3]": float(),
+                   "mass concentration PM2.5 [ug/m3]": float(),
+                   "mass concentration PM4 [ug/m3]": float(),
+                   "mass concentration PM10 [ug/m3]": float(),
+                   "number concentration PM0.5 [#/cm3]": float(),
+                   "number concentration PM1.0 [#/cm3]": float(),
+                   "number concentration PM2.5 [#/cm3]": float(),
+                   "number concentration PM4 [#/cm3]": float(),
+                   "number concentration PM10 [#/cm3]": float(),
+                   "typical particle size": float()  # [um]- for float/[nm] - for uint
                    }
 
     def __init__(self, i2c: I2C):
@@ -106,7 +106,6 @@ class SPS30:
     def _start_measurement(self, out_format=MeasType.IEEE754_TYPE):
         """
         function which starts measurement cycle
-
         :param out_format: format of measurement (int or float); default float
         :return: none
         """
@@ -134,7 +133,7 @@ class SPS30:
         """
         self._i2c.write(self._ADDR, self._STOP_MEAS)
 
-    def _read_measured_values(self):
+    def _read_measured_values(self) -> dict[str, float | int]:
         """
         function to read single measurement from device
         :return: dictionary with measurements
@@ -155,9 +154,10 @@ class SPS30:
             measured_values = self._calculate_sensor_values(byte_array)
             return measured_values
         else:
-            return self._MEASURED_VALUES_ERROR
+            self.device_reset()
+            raise Exception("Communication error: Wrong CRC")
 
-    def _calculate_sensor_values(self, byte_arr):
+    def _calculate_sensor_values(self, byte_arr) -> dict[str, float]:
         """
         function which calculates actual values of measurement based on bytes received from device
         :param byte_arr: array of bytes which come from device after measurement
@@ -182,8 +182,11 @@ class SPS30:
 
         return values
 
+    def _wrong_crc_exception_handler(self):
+        self.device_reset()
+
     @staticmethod
-    def _parse_IEEE754_to_float(value):
+    def _parse_IEEE754_to_float(value) -> float:
         """
         function which parses number from IEEE754 to float
         :param value: number in IEEE754 format
@@ -197,7 +200,7 @@ class SPS30:
     #     # returns dictionary
     #     return self.dict_output
 
-    def measure(self, out_format=MeasType.IEEE754_TYPE):
+    def measure_pm(self, out_format=MeasType.IEEE754_TYPE):
         """
         function to measure particle matters implemented according to sps30 datasheet:
         - after waking up device wait 30 sec
@@ -216,14 +219,8 @@ class SPS30:
                 pass
             i += 1
             readout = self._read_measured_values()
-            if readout == self._MEASURED_VALUES_ERROR:  # in case of error:
-                # reset device?
-                for i in measurements:
-                    measurements[i] = -1
-                    return measurements
-            else:
-                for i in measurements:
-                    measurements[i] += readout[i]
+            for i in measurements:
+                measurements[i] += readout[i]
         # calculate average
         if self.chosen_meas_type == self.MeasType.IEEE754_TYPE:
             for i in measurements:
@@ -235,12 +232,12 @@ class SPS30:
         self._stop_measurement()
         return measurements
 
-    def print_measured_values(self):
+    def measure_pm_and_print(self):
         """
-        print dictionary with measured values
+        starts measurement and prints dictionary with measured values
         :return: none
         """
-        meas_dict = self.measure()
+        meas_dict = self.measure_pm()
         for i in meas_dict:
             if i == "typical particle size":
                 if self.chosen_meas_type == self.MeasType.IEEE754_TYPE:
