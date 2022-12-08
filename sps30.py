@@ -35,16 +35,16 @@ class SPS30:
 
     chosen_meas_type = -1
 
-    dict_output = {"mass concentration PM1.0 [ug/m3]": float(),
-                   "mass concentration PM2.5 [ug/m3]": float(),
-                   "mass concentration PM4 [ug/m3]": float(),
-                   "mass concentration PM10 [ug/m3]": float(),
-                   "number concentration PM0.5 [#/cm3]": float(),
-                   "number concentration PM1.0 [#/cm3]": float(),
-                   "number concentration PM2.5 [#/cm3]": float(),
-                   "number concentration PM4 [#/cm3]": float(),
-                   "number concentration PM10 [#/cm3]": float(),
-                   "typical particle size": float()  # [um]- for float/[nm] - for uint
+    dict_output = {"mass concentration PM1.0 [ug/m3]": 0,
+                   "mass concentration PM2.5 [ug/m3]": 0,
+                   "mass concentration PM4 [ug/m3]": 0,
+                   "mass concentration PM10 [ug/m3]": 0,
+                   "number concentration PM0.5 [#/cm3]": 0,
+                   "number concentration PM1.0 [#/cm3]": 0,
+                   "number concentration PM2.5 [#/cm3]": 0,
+                   "number concentration PM4 [#/cm3]": 0,
+                   "number concentration PM10 [#/cm3]": 0,
+                   "typical particle size": 0  # [um]- for float/[nm] - for uint
                    }
 
     def __init__(self, i2c: I2C):
@@ -153,9 +153,8 @@ class SPS30:
         if self._checkCRC(byte_array):
             measured_values = self._calculate_sensor_values(byte_array)
             return measured_values
-        else:
-            self.device_reset()
-            raise Exception("Communication error: Wrong CRC")
+        else:  # handling event of communication error
+            self._wrong_crc_exception_handler()
 
     def _calculate_sensor_values(self, byte_arr) -> dict[str, float]:
         """
@@ -183,7 +182,8 @@ class SPS30:
         return values
 
     def _wrong_crc_exception_handler(self):
-        self.device_reset()
+        self.device_reset()  # reset device before raising error
+        raise Exception("Communication error: Wrong CRC")
 
     @staticmethod
     def _parse_IEEE754_to_float(value) -> float:
@@ -212,15 +212,13 @@ class SPS30:
         """
         self._start_measurement(out_format)
         sleep(30)
-        i = 0
         measurements = dict(self.dict_output)
-        while i < 30:  # get 30 measurements to calculate avg
+        for i in range(30):  # get 30 measurements to calculate avg
             while not self._read_data_ready_flag():  # wait for next values (approx. 1 sec)
                 pass
-            i += 1
             readout = self._read_measured_values()
-            for i in measurements:
-                measurements[i] += readout[i]
+            for m in measurements:
+                measurements[m] += readout[m]
         # calculate average
         if self.chosen_meas_type == self.MeasType.IEEE754_TYPE:
             for i in measurements:
@@ -241,11 +239,11 @@ class SPS30:
         for i in meas_dict:
             if i == "typical particle size":
                 if self.chosen_meas_type == self.MeasType.IEEE754_TYPE:
-                    print(i + " [um]" + ": " + str(meas_dict[i]))
+                    print(i + " [um]" + ": " + f'{meas_dict[i]:.3f}')
                 elif self.chosen_meas_type == self.MeasType.UINT_TYPE:
-                    print(i + " [nm]" + ": " + str(meas_dict[i]))
+                    print(i + " [nm]" + ": " + f'{meas_dict[i]:.3f}')
             else:
-                print(i + ": " + str(meas_dict[i]))
+                print(i + ": " + f'{meas_dict[i]:.3f}')
 
     def _read_data_ready_flag(self):
         """
@@ -259,7 +257,7 @@ class SPS30:
             # flag is stored in first byte of the returned array
             return byte_arr[1] == 0x01
         else:
-            return False
+            self._wrong_crc_exception_handler()
 
     def _wake_up(self):
         """
