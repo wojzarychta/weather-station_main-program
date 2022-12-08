@@ -88,7 +88,7 @@ class SPS30:
                 device_serial.append(chr(buf[i - 1]))
             return str("".join(device_serial))
         else:
-            return self._SERIAL_NUMBER_ERROR
+            self._wrong_crc_exception_handler()
 
     def read_firmware_ver(self):
         """
@@ -182,6 +182,11 @@ class SPS30:
         return values
 
     def _wrong_crc_exception_handler(self):
+        """
+        function which handles event of receiving wrong CRC, which is a transmission error
+        :raises Exception: Communication error: Wrong CRC
+        :return: none
+        """
         self.device_reset()  # reset device before raising error
         raise Exception("Communication error: Wrong CRC")
 
@@ -230,12 +235,12 @@ class SPS30:
         self._stop_measurement()
         return measurements
 
-    def measure_pm_and_print(self):
+    def measure_pm_and_print(self, out_format=MeasType.IEEE754_TYPE):
         """
         starts measurement and prints dictionary with measured values
         :return: none
         """
-        meas_dict = self.measure_pm()
+        meas_dict = self.measure_pm(out_format)
         for i in meas_dict:
             if i == "typical particle size":
                 if self.chosen_meas_type == self.MeasType.IEEE754_TYPE:
