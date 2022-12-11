@@ -52,7 +52,12 @@ class SPS30:
 
     @staticmethod
     def _calculateCRC(two_bytes):
-        # checksum calculated according to sensiron's datasheet
+        """
+        function calculates crc accordingly to datasheet (polynomial = 0x31)
+        :param two_bytes: list of two_bytes from which crc is to be calculated: list
+        :return: crc value: int
+        """
+        # checksum calculated according to
         crc = 0xFF
         for i in range(0, 2):
             crc = crc ^ two_bytes[i]
@@ -65,6 +70,11 @@ class SPS30:
         return crc
 
     def _checkCRC(self, result):
+        """
+        function checks if received information is correct and crc recived is correct
+        :param result: list of received bytes, divisible by 3: list
+        :return: boolean, True if information is free of errors
+        """
         for i in range(2, len(result), 3):
             data = [result[i - 2], result[i - 1]]
             crc = result[i]
@@ -201,10 +211,6 @@ class SPS30:
         byte_value = bytes.fromhex(string_value)
         return struct.unpack('>f', byte_value)[0]
 
-    # def access_measured_values(self):
-    #     # returns dictionary
-    #     return self.dict_output
-
     def measure_pm(self, out_format=MeasType.IEEE754_TYPE):
         """
         function to measure particle matters implemented according to sps30 datasheet:
@@ -274,10 +280,18 @@ class SPS30:
             self._i2c.write(self._ADDR, self._WAKE_UP)
 
     def sleep(self):
+        """
+        puts device in sleep mode
+        :return: none
+        """
         self._i2c.write(self._ADDR, self._SLEEP)
 
     def start_fan_cleaning(self):
         self._i2c.write(self._ADDR, self._CLEAN_FAN)
 
     def device_reset(self):
+        """
+        resets device; after reset device is in idle mode and needs to be woke up
+        :return: none
+        """
         self._i2c.write(self._ADDR, self._RESET)
