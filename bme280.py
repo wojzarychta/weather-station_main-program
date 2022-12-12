@@ -1,8 +1,9 @@
 from i2c import *
 
 
-# Bme280 doesn't support auto-incrementing in writing mode!
 class BME280:
+    # Bme280 doesn't support auto-incrementing in writing mode!
+
     # CONSTANTS
     _ADDR = 0x77  # or 0x78!
 
@@ -17,9 +18,9 @@ class BME280:
     _CTRL_MEAS = 0xF4
     _CONFIG = 0xF5
 
-    dict_meas = {"temperature": None,   # [DegC]
-                 "humidity": None,      # [%]
-                 "pressure": None       # [hPa]
+    dict_meas = {"temperature [DegC]": 0.0,
+                 "pressure [hPa]": 0.0,
+                 "humidity [%]": 0.0
                  }
 
     _t_fine = None
@@ -28,15 +29,26 @@ class BME280:
         self._i2c = i2c
 
     def read_id(self):
+        """
+        read device's id, which is supposed to be 0x60
+        :return: device's id: int
+        """
         self._i2c.write_byte(self._ADDR, self._ID_REG)
         dev_id = self._i2c.read(self._ADDR, 1)
         return dev_id == 0x60  # 0x60 is supposed value in this register acc to datasheet
 
     def reset_device(self):
+        """
+        resets device
+        :return: none
+        """
         self._i2c.write_to_reg(self._ADDR, self._RESET_REG, self._RESET)
 
     def measure(self):
-        # returns dictionary with all measurements
+        """
+        measures temperature in DegC, pressure in hPa and humidity in %RH
+        :return: dictionary with measurements
+        """
         registers = self._burst_read()
         temp_reg = registers[3:6]
         press_reg = registers[:3]
@@ -48,20 +60,26 @@ class BME280:
 
         trimming_param = self._read_trimming_param()
 
-        self.dict_meas["temperature"] = self._compensate_temp(raw_t, trimming_param[:3])
-        self.dict_meas["pressure"] = self._compensate_press(raw_p, trimming_param[3:12])
-        self.dict_meas["humidity"] = self._compensate_hum(raw_h, trimming_param[12:])
+        self.dict_meas["temperature [DegC]"] = self._compensate_temp(raw_t, trimming_param[:3])
+        self.dict_meas["pressure [hPa]"] = self._compensate_press(raw_p, trimming_param[3:12])
+        self.dict_meas["humidity [%]"] = self._compensate_hum(raw_h, trimming_param[12:])
 
         return self.dict_meas
 
     def _burst_read(self):
-        # returns content of registers from 0xF7 to 0xFE
+        """
+        reads content of registers from 0xF7 to 0xFE
+        :return: content of registers from 0xF7 to 0xFE as list
+        """
         self._i2c.write(self._ADDR, [0xF7])
         buf = self._i2c.read(self._ADDR, 8)
         return buf
 
     def _read_trimming_param(self):
-        # returns content of trimming registers from 0x88 to 0xA1 and from 0xE1 to 0xE6
+        """
+        returns content of trimming registers from 0x88 to 0xA1 and from 0xE1 to 0xE6
+        :return: list with content of trimming registers
+        """
         self._i2c.write(self._ADDR, [0x88])
         buf = self._i2c.read(self._ADDR, 25)
 
@@ -79,16 +97,26 @@ class BME280:
 
         return trim_reg
 
-    def _compensate_temp(self, adc_t, dig_t):
-        # compensates and returns temperature in DegC, resolution is 0.01 DegC
+    def _compensate_temp(self, adc_t, dig_t) -> float:
+        """
+        compensates and returns temperature in DegC, resolution is 0.01 DegC
+        :param adc_t: adc output value
+        :param dig_t: trimming parameters
+        :return: temperature in DegC
+        """
         var1 = (adc_t / 16384.0 - dig_t[0] / 1024.0) * dig_t[1]
         var2 = ((adc_t / 131072.0 - dig_t[0] / 8192.0) * (adc_t / 131072.0 - dig_t[0] / 8192.0)) * dig_t[2]
         self._t_fine = var1 + var2
         t = (var1 + var2) / 5120.0
         return t
 
-    def _compensate_press(self, adc_p, dig_p):
-        # compensates and returns pressure in hPa
+    def _compensate_press(self, adc_p, dig_p) -> float:
+        """
+        compensates and returns pressure in hPa
+        :param adc_p: adc output value
+        :param dig_p: trimming parameters
+        :return: pressure in hPa
+        """
         var1 = self._t_fine/2.0 - 64000.0
         var2 = var1 * var1 * dig_p[5] / 32768.0
         var2 += var1 * dig_p[4] * 2.0
@@ -102,10 +130,15 @@ class BME280:
         var1 = dig_p[8] * p * p / 2147483648.0
         var2 = p * dig_p[7] / 32768.0
         p = p + (var1 + var2 + dig_p[6]) / 16.0
-        return p/100.0
+        return p/100
 
-    def _compensate_hum(self, adc_h, dig_h):
-        # compensates and returns humidity in %RH
+    def _compensate_hum(self, adc_h, dig_h) -> float:
+        """
+        compensates and returns humidity in %RH
+        :param adc_h: adc output value
+        :param dig_h: trimming parameters
+        :return: relative humidity in %
+        """
         var1 = self._t_fine - 76800.0
         var1 = (adc_h - (dig_h[3] * 64.0 + dig_h[4] / 16384.0 * var1)) * \
                (dig_h[1] / 65536.0 * (1.0 + dig_h[5] / 67108864.0 * var1 * (1.0 + dig_h[2] / 67108864.0 * var1)))
