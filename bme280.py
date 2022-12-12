@@ -5,7 +5,7 @@ class BME280:
     # Bme280 doesn't support auto-incrementing in writing mode!
 
     # CONSTANTS
-    _ADDR = 0x77  # or 0x78!
+    _ADDR = 0x76  # SDO connected to GND; 0x77 when SDO connected to VDD
 
     _ID_REG = 0xD0
     _TEMP_REG = [0xFA, 0xFB, 0xFC]

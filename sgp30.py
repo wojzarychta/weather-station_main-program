@@ -18,7 +18,7 @@ def parse_float_to_fixed_point(f: float):
     """
     parses float to fixed-point 8.8bit number
     :param f: float
-    :return: fixed-point 8.8bit number as a list of two bytes
+    :return: fixed-point 8.8bit number as a list of two bytes [MSB, LSB]
     """
     fixed = [int(f), int(f % 1 * 256)]
     return fixed
