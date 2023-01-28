@@ -1,4 +1,5 @@
 from i2c import *
+from time import sleep
 
 
 class BME280:
@@ -17,6 +18,10 @@ class BME280:
     _STATUS = 0xF3
     _CTRL_MEAS = 0xF4
     _CONFIG = 0xF5
+
+    _SLEEP_MODE = 0
+    _NORMAL_MODE = 1
+    _FORCED_MODE = 2
 
     dict_meas = {"temperature [DegC]": 0.0,
                  "pressure [hPa]": 0.0,
@@ -44,9 +49,10 @@ class BME280:
         """
         self._i2c.write_to_reg(self._ADDR, self._RESET_REG, self._RESET)
 
-    def measure(self):
+    def access_measurements(self):
         """
-        measures temperature in DegC, pressure in hPa and humidity in %RH
+        obtains measurements from registers
+        returns temperature in DegC, pressure in hPa and humidity in %RH
         :return: dictionary with measurements
         """
         registers = self._burst_read()
@@ -56,7 +62,7 @@ class BME280:
 
         raw_t = (temp_reg[0] * pow(2, 16) + temp_reg[1] * pow(2, 8) + temp_reg[2]) >> 4
         raw_p = (press_reg[0] * pow(2, 16) + press_reg[1] * pow(2, 8) + press_reg[2]) >> 4
-        raw_h = hum_reg[0] * pow(2, 16) + hum_reg[1]
+        raw_h = hum_reg[0] * pow(2, 8) + hum_reg[1]
 
         trimming_param = self._read_trimming_param()
 
@@ -65,6 +71,46 @@ class BME280:
         self.dict_meas["humidity [%]"] = self._compensate_hum(raw_h, trimming_param[12:])
 
         return self.dict_meas
+
+    def print_single_measurement(self):
+        """
+        measures and prints temperature in DegC, pressure in hPa and humidity in %RH and prints results
+        :return:
+        """
+        self._single_measure()
+        meas = self.access_measurements()
+        for i in meas:
+            print(i + ": " + str(meas[i]))
+
+    def _single_measure(self):
+        """
+        changes mode to force mode and performs single measure
+        :return:
+        """
+        self._change_sensor_mode(self._FORCED_MODE)
+        sleep(0.01)  # wait for measurements to be made
+
+    def _change_sensor_mode(self, mode: int):
+        """
+        executes transition of operating mode of sensor
+        :return: none
+        """
+        if mode == self._SLEEP_MODE:
+            mode_code = 0x00
+        elif mode == self._FORCED_MODE:
+            mode_code = 0x01
+        elif mode == self._NORMAL_MODE:
+            mode_code = 0x11
+        else:
+            raise Exception("Improper mode")
+        # read ctrl_meas:
+        self._i2c.write(self._ADDR, [self._CTRL_MEAS])
+        reg = self._i2c.read(self._ADDR, 1)
+        val = reg[0] | mode_code  # writing mode to bits [1:0]
+        self._i2c.write_to_reg(self._ADDR, self._CTRL_MEAS, reg)
+
+    def _setup(self):
+        pass
 
     def _burst_read(self):
         """
@@ -81,19 +127,23 @@ class BME280:
         :return: list with content of trimming registers
         """
         self._i2c.write(self._ADDR, [0x88])
-        buf = self._i2c.read(self._ADDR, 25)
+        buf = self._i2c.read(self._ADDR, 24)
+
+        self._i2c.write(self._ADDR, [0xA1])
+        buf.extend(self._i2c.read(self._ADDR, 1))
 
         self._i2c.write(self._ADDR, [0xE1])
-        buf.append(self._i2c.read(self._ADDR, 6))
+        buf.extend(self._i2c.read(self._ADDR, 7))
 
         trim_reg = []
         for i in range(12):
-            trim_reg[i] = buf[2*i] + buf[2*i + 1] * pow(2, 8)
-        trim_reg[12] = buf[24]
-        trim_reg[13] = buf[25] + buf[26] * pow(2, 8)
-        trim_reg[14] = buf[27]
-        trim_reg[15] = buf[28] * pow(2, 4) + (buf[29] & 0x0F)
-        trim_reg[16] = buf[30] * pow(2, 4) + (buf[29] >> 4)
+            trim_reg.append(buf[2 * i] + buf[2 * i + 1] * pow(2, 8))
+        trim_reg.append(buf[24])
+        trim_reg.append(buf[25] + buf[26] * pow(2, 8))
+        trim_reg.append(buf[27])
+        trim_reg.append(buf[28] * pow(2, 4) + (buf[29] & 0x0F))
+        trim_reg.append(buf[30] * pow(2, 4) + (buf[29] >> 4))
+        trim_reg.append(buf[31])
 
         return trim_reg
 
@@ -117,7 +167,7 @@ class BME280:
         :param dig_p: trimming parameters
         :return: pressure in hPa
         """
-        var1 = self._t_fine/2.0 - 64000.0
+        var1 = self._t_fine / 2.0 - 64000.0
         var2 = var1 * var1 * dig_p[5] / 32768.0
         var2 += var1 * dig_p[4] * 2.0
         var2 = (var2 / 4.0) + (dig_p[3] * 65536.0)
@@ -130,7 +180,7 @@ class BME280:
         var1 = dig_p[8] * p * p / 2147483648.0
         var2 = p * dig_p[7] / 32768.0
         p = p + (var1 + var2 + dig_p[6]) / 16.0
-        return p/100
+        return p / 100
 
     def _compensate_hum(self, adc_h, dig_h) -> float:
         """

@@ -143,7 +143,7 @@ class SPS30:
         """
         self._i2c.write(self._ADDR, self._STOP_MEAS)
 
-    def _read_measured_values(self) -> dict[str, float | int]:
+    def _read_measured_values(self):
         """
         function to read single measurement from device
         :return: dictionary with measurements
@@ -218,7 +218,7 @@ class SPS30:
         - then, for 30 sec read values once a sec
         - take average from above 30 measurements
         - put device to sleep
-        :param out_format:
+        :param out_format: format of measurement (int or IEEE754)
         :return: dictionary with correct measurements
         """
         self._start_measurement(out_format)

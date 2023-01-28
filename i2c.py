@@ -9,6 +9,10 @@ def _bytes_to_int(num_of_bytes):
 
 
 class I2C:
+    """
+    class for I2C communication
+    enables to write to and read from I2C (TWI) interface
+    """
 
     def __init__(self, port):
         self.bus = SMBus(port)
