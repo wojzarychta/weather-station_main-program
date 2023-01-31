@@ -1,6 +1,6 @@
 from i2c import *
 import math
-from time import sleep
+import time
 
 
 def calculate_absolute_humidity(rh: float, t: float):
@@ -39,9 +39,11 @@ class SGP30:
     _SET_TVOC_BASELINE = [0x20, 0x77]
     _READ_SERIAL_NUMBER = [0x36, 0x82]
 
-    dict_output = {"TVOC [ppb]": 0,
-                   "CO2eq [ppm]": 0
+    measurement = {"TVOC": 0,
+                   "CO2eq": 0
                    }
+
+    measurement_ready = False
 
     def __init__(self, i2c: I2C):
         self._i2c = i2c
@@ -153,14 +155,24 @@ class SGP30:
         """
         self._start_measurement()
         # self._set_absolute_humidity()  # optional
+        start_time = time.time()
         while True:
             meas = self._single_measurement()
             if meas[0] != 400 and meas[1] != 0:  # during first 15sec sensor returns fixed values of 400 ppm CO2eq
                 # and 0 ppb TVOC
                 break
-            sleep(1)
+            time.sleep(1)
+            # while time.time() - start_time < 1:  # sleep for 1 s
+            #     pass
+        self.measurement["TVOC"] = meas[1]
+        self.measurement["CO2eq"] = meas[0]
+        self.measurement_ready = True
+        self.print_measurement()  # pozniej usunac
+        return self.measurement
 
-        output = dict(self.dict_output)
-        output["TVOC [ppb]"] = meas[1]
-        output["CO2eq [ppm]"] = meas[0]
-        return output
+    def print_measurement(self):
+        if self.measurement_ready:
+            print('{}{:05.2f} ppb\n{}{:05.2f} ppm'.format("TVOC:", self.measurement["TVOC"],
+                                                          "CO2eq:", self.measurement["CO2eq"]))
+        else:
+            raise RuntimeWarning("There is no measurement to be printed")

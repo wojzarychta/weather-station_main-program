@@ -2,6 +2,7 @@ from i2c import *
 from time import sleep
 import struct
 
+
 def to_signed_short(val: int):
     """
     parses number to its signed representation
@@ -10,14 +11,12 @@ def to_signed_short(val: int):
     """
     return struct.unpack('<h', val.to_bytes(2, 'little'))[0]
 
+
 class BME280:
     # CONSTANTS
     _ADDR = 0x76
     # REGISTERS
     _ID_REG = 0xD0
-    _TEMP_REG = [0xFA, 0xFB, 0xFC]
-    _HUM_REG = [0xFD, 0xFE]
-    _PRESS_REG = [0xF7, 0xF8, 0xF9]
     _RESET_REG = 0xE0
     _RESET = 0xB6
     _CTRL_HUM = 0xF2
@@ -25,9 +24,9 @@ class BME280:
     _CTRL_MEAS = 0xF4
     _CONFIG = 0xF5
 
-    dig_t = [None] * 3
-    dig_p = [None] * 9
-    dig_h = [None] * 6
+    dig_t = [0] * 3
+    dig_p = [0] * 9
+    dig_h = [0] * 6
 
     dict_meas = {'t': 0.0,
                  'p': 0.0,
@@ -36,7 +35,7 @@ class BME280:
 
     _t_fine = None
 
-    def __init__(self, i2c: I2C, address = 0x76):
+    def __init__(self, i2c: I2C, address=0x76):
         """
         class for bme280 sensor service
         :param i2c: instance of i2c class
@@ -50,11 +49,11 @@ class BME280:
     def read_id(self):
         """
         reads device's id, which is supposed to be 0x60
-        :return: True if id is correct
+        :return: True if id is correct (equal to 0x60)
         """
         self._i2c.write_byte(self._ADDR, self._ID_REG)
         dev_id = self._i2c.read(self._ADDR, 1)
-        return dev_id[0] == 0x60  # 0x60 is supposed value in this register according to datasheet
+        return dev_id[0] == 0x60
 
     def reset_device(self):
         """
@@ -81,7 +80,7 @@ class BME280:
 
         self.dig_p[0] = buf[6] + (buf[7] << 8)
         for i in range(4, 12):
-            self.dig_p[i-3] = to_signed_short(buf[2 * i] + (buf[2 * i + 1] << 8))
+            self.dig_p[i - 3] = to_signed_short(buf[2 * i] + (buf[2 * i + 1] << 8))
 
         self.dig_h[0] = buf[24]
         self.dig_h[1] = to_signed_short(buf[25] + buf[26] * pow(2, 8))
@@ -124,20 +123,22 @@ class BME280:
         meas = self.access_measurements()
         print('{:05.2f} DegC {:05.2f} hPa {:05.2f}%'.format(meas['t'], meas['p'], meas['h']))
 
-    def continuous_measurement(self, frequency = 1):
+    def continuous_measurement(self, frequency=1):
         """
         performs measurement in normal mode and prints results
         :param frequency: frequency of measurements in Hz; available f = {2000, 100, 50, 16, 8, 4, 2, 1}
         :return: none
         """
         valid_f = {2000, 100, 50, 16, 8, 4, 2, 1}
-        self.setup(mode='normal', standby=1000 / frequency)
+        if frequency not in valid_f:
+            raise ValueError("Wrong frequency")
+        self.setup(mode='normal', standby=1000 // frequency)
         while True:
             meas = self.access_measurements()
             print('{:05.2f} DegC {:05.2f} hPa {:05.2f}%'.format(meas['t'], meas['p'], meas['h']))
             sleep(1 / frequency)
 
-    def change_sensor_mode(self, mode = 'normal'):
+    def change_sensor_mode(self, mode='normal'):
         """
         executes transition of operating mode of sensor
         :param mode: operating mode of device: {'sleep', 'forced', 'normal'}
@@ -154,7 +155,7 @@ class BME280:
         val = (reg[0] & 0xFC) | (mode & 0x03)  # writing mode to bits [1:0]
         self._i2c.write_to_reg(self._ADDR, self._CTRL_MEAS, val)
 
-    def setup(self,  mode='normal', t_oversampling=1, p_oversampling=1, h_oversampling=1, standby=1000):
+    def setup(self, mode='normal', t_oversampling=1, p_oversampling=1, h_oversampling=1, standby=1000):
         """
         setups device
         :param mode: operating mode of device: {'sleep', 'forced', 'normal'}
@@ -188,14 +189,14 @@ class BME280:
         else:
             h_oversampling = valid_osr[h_oversampling]
 
-        valid_stanby = {0.5: 0b000, 62.5: 0b001, 125: 0b010, 250: 0b011, 500: 0b100, 1000: 0b101, 10: 0b110, 20: 0b111}
-        if standby not in valid_stanby:
+        valid_standby = {0.5: 0b000, 62.5: 0b001, 125: 0b010, 250: 0b011, 500: 0b100, 1000: 0b101, 10: 0b110, 20: 0b111}
+        if standby not in valid_standby:
             raise ValueError("Wrong standby time")
         else:
-            standby = valid_stanby[standby]
+            standby = valid_standby[standby]
 
         ctrl_hum = h_oversampling
-        ctrl_meas = t_oversampling << 5 + p_oversampling << 2 + mode
+        ctrl_meas = (t_oversampling << 5) + (p_oversampling << 2) + mode
         config = standby << 5  # turns filter off and doesn't enable 3-wire SPI
 
         # write values to registers
@@ -213,7 +214,7 @@ class BME280:
         """
         self._i2c.write(self._ADDR, [self._STATUS])
         buf = self._i2c.read(self._ADDR, 1)
-        return buf[0] & 1 << 3
+        return buf[0] & 1 << 3  # 3rd bit is set to 1 while conversion is running
 
     def _burst_read(self):
         """
@@ -228,11 +229,11 @@ class BME280:
         """
         compensates and returns temperature in DegC, resolution is 0.01 DegC
         :param adc_t: adc output value
-        :param dig_t: trimming parameters
         :return: temperature in DegC
         """
         var1 = (adc_t / 16384.0 - self.dig_t[0] / 1024.0) * self.dig_t[1]
-        var2 = ((adc_t / 131072.0 - self.dig_t[0] / 8192.0) * (adc_t / 131072.0 - self.dig_t[0] / 8192.0)) * self.dig_t[2]
+        var2 = ((adc_t / 131072.0 - self.dig_t[0] / 8192.0) * (adc_t / 131072.0 - self.dig_t[0] / 8192.0)) * self.dig_t[
+            2]
         self._t_fine = var1 + var2
         t = (var1 + var2) / 5120.0
         return t
@@ -241,7 +242,6 @@ class BME280:
         """
         compensates and returns pressure in hPa
         :param adc_p: adc output value
-        :param dig_p: trimming parameters
         :return: pressure in hPa
         """
         var1 = self._t_fine / 2.0 - 64000.0
@@ -263,12 +263,12 @@ class BME280:
         """
         compensates and returns humidity in %RH
         :param adc_h: adc output value
-        :param dig_h: trimming parameters
         :return: relative humidity in %
         """
         var1 = self._t_fine - 76800.0
         var1 = (adc_h - (self.dig_h[3] * 64.0 + self.dig_h[4] / 16384.0 * var1)) * \
-               (self.dig_h[1] / 65536.0 * (1.0 + self.dig_h[5] / 67108864.0 * var1 * (1.0 + self.dig_h[2] / 67108864.0 * var1)))
+               (self.dig_h[1] / 65536.0 * (
+                           1.0 + self.dig_h[5] / 67108864.0 * var1 * (1.0 + self.dig_h[2] / 67108864.0 * var1)))
         var1 *= (1.0 - self.dig_h[0] * var1 / 524288.0)
         if var1 > 100.0:
             var1 = 100.0

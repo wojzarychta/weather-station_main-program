@@ -1,7 +1,8 @@
+import time
+
 from i2c import *
 import struct
 from enum import Enum
-from time import sleep
 
 
 class SPS30:
@@ -35,7 +36,9 @@ class SPS30:
 
     chosen_meas_type = -1
 
-    dict_output = {"mass concentration PM1.0 [ug/m3]": 0,
+    measurement_ready = False
+
+    measurement = {"mass concentration PM1.0 [ug/m3]": 0,
                    "mass concentration PM2.5 [ug/m3]": 0,
                    "mass concentration PM4 [ug/m3]": 0,
                    "mass concentration PM10 [ug/m3]": 0,
@@ -71,7 +74,7 @@ class SPS30:
 
     def _checkCRC(self, result):
         """
-        function checks if received information is correct and crc recived is correct
+        function checks if received information is correct and crc received is correct
         :param result: list of received bytes, divisible by 3: list
         :return: boolean, True if information is free of errors
         """
@@ -172,7 +175,7 @@ class SPS30:
         :param byte_arr: array of bytes which come from device after measurement
         :return: decoded measurement values as dictionary
         """
-        values = dict(self.dict_output)
+        values = dict(self.measurement)
 
         if self.chosen_meas_type == self.MeasType.IEEE754_TYPE:
             i = 4
@@ -211,7 +214,7 @@ class SPS30:
         byte_value = bytes.fromhex(string_value)
         return struct.unpack('>f', byte_value)[0]
 
-    def measure_pm(self, out_format=MeasType.IEEE754_TYPE):
+    def measure(self, out_format=MeasType.IEEE754_TYPE):
         """
         function to measure particle matters implemented according to sps30 datasheet:
         - after waking up device wait 30 sec
@@ -219,42 +222,41 @@ class SPS30:
         - take average from above 30 measurements
         - put device to sleep
         :param out_format: format of measurement (int or IEEE754)
-        :return: dictionary with correct measurements
+        :return: none
         """
         self._start_measurement(out_format)
-        sleep(30)
-        measurements = dict(self.dict_output)
+        # sleep(30)
+        start_time = time.time()
+        while time.time() - start_time < 30:  # sleep for 30 s
+            pass
         for i in range(30):  # get 30 measurements to calculate avg
             while not self._read_data_ready_flag():  # wait for next values (approx. 1 sec)
                 pass
             readout = self._read_measured_values()
-            for m in measurements:
-                measurements[m] += readout[m]
+            for m in self.measurement:
+                self.measurement[m] += readout[m]
         # calculate average
         if self.chosen_meas_type == self.MeasType.IEEE754_TYPE:
-            for i in measurements:
-                measurements[i] /= 30
+            for i in self.measurement:
+                self.measurement[i] /= 30
         elif self.chosen_meas_type == self.MeasType.UINT_TYPE:
-            for i in measurements:
-                measurements[i] //= 30
-
+            for i in self.measurement:
+                self.measurement[i] //= 30
         self._stop_measurement()
-        return measurements
+        self.measurement_ready = True
 
-    def measure_pm_and_print(self, out_format=MeasType.IEEE754_TYPE):
-        """
-        starts measurement and prints dictionary with measured values
-        :return: none
-        """
-        meas_dict = self.measure_pm(out_format)
-        for i in meas_dict:
-            if i == "typical particle size":
-                if self.chosen_meas_type == self.MeasType.IEEE754_TYPE:
-                    print(i + " [um]" + ": " + f'{meas_dict[i]:.3f}')
-                elif self.chosen_meas_type == self.MeasType.UINT_TYPE:
-                    print(i + " [nm]" + ": " + f'{meas_dict[i]:.3f}')
-            else:
-                print(i + ": " + f'{meas_dict[i]:.3f}')
+    def print_measurement(self):
+        if self.measurement_ready:
+            for i in self.measurement:
+                if i == "typical particle size":
+                    if self.chosen_meas_type == self.MeasType.IEEE754_TYPE:
+                        print(i + " [um]" + ": " + f'{self.measurement[i]:.3f}')
+                    elif self.chosen_meas_type == self.MeasType.UINT_TYPE:
+                        print(i + " [nm]" + ": " + f'{self.measurement[i]:.3f}')
+                else:
+                    print(i + ": " + f'{self.measurement[i]:.3f}')
+        else:
+            raise RuntimeWarning("There is no measurement to be printed")
 
     def _read_data_ready_flag(self):
         """
