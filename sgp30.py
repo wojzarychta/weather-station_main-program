@@ -38,6 +38,8 @@ class SGP30:
     _GET_TVOC_INCEPTIVE_BASELINE = [0x20, 0xb3]
     _SET_TVOC_BASELINE = [0x20, 0x77]
     _READ_SERIAL_NUMBER = [0x36, 0x82]
+    _GENERAL_CALL_ADDRESS = 0x00
+    _RESET = 0x06
 
     measurement = {"TVOC": 0,
                    "CO2eq": 0
@@ -86,16 +88,18 @@ class SGP30:
         :raises Exception: Communication error: Wrong CRC
         :return: device's serial number in hex as string
         """
-        device_serial = []
+        device_serial = 0
 
         self._i2c.write(self._ADDR, self._READ_SERIAL_NUMBER)
-        buf = self._i2c.read(self._ADDR, 48)
+        buf = self._i2c.read(self._ADDR, 6)
 
         if self._checkCRC(buf):
-            for i in range(2, len(buf), 3):
-                device_serial.append(chr(buf[i - 2]))
-                device_serial.append(chr(buf[i - 1]))
-            return str("".join(device_serial))
+            for i in range(len(buf)):
+                if (i+1) % 3 == 0:
+                    continue
+                else:
+                    device_serial = (device_serial << 8) + buf[i]
+            return hex(device_serial)
         else:
             self._wrong_crc_exception_handler()
 
@@ -114,6 +118,7 @@ class SGP30:
         :return: none
         """
         self._i2c.write(self._ADDR, self._IAQ_INIT)
+        time.sleep(0.01)
 
     def _single_measurement(self):
         """
@@ -121,7 +126,7 @@ class SGP30:
         :return: list of measurement, [CO2eq, TVOC]
         """
         self._i2c.write(self._ADDR, self._MEASURE_IAQ)
-
+        time.sleep(0.012)
         bytes_to_read = 6
         byte_array = self._i2c.read(self._ADDR, bytes_to_read)
 
@@ -162,8 +167,9 @@ class SGP30:
                 # and 0 ppb TVOC
                 break
             time.sleep(1)
-            # while time.time() - start_time < 1:  # sleep for 1 s
-            #     pass
+            while time.time() - start_time < 1:  # sleep for 1 s
+                pass
+            start_time = time.time()
         self.measurement["TVOC"] = meas[1]
         self.measurement["CO2eq"] = meas[0]
         self.measurement_ready = True
@@ -176,3 +182,13 @@ class SGP30:
                                                           "CO2eq:", self.measurement["CO2eq"]))
         else:
             raise RuntimeWarning("There is no measurement to be printed")
+
+    def soft_reset(self):
+        """
+        Resets sensors using “General Call” mode according to I2C-bus specification.
+        It is important to understand that a reset generated in this way is not device specific.
+        All devices on the same I2C bus that support the General Call mode will perform a reset.
+        :return: none
+        """
+        self._i2c.write_byte(self._GENERAL_CALL_ADDRESS, self._RESET)
+
