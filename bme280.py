@@ -3,6 +3,13 @@ from time import sleep
 import struct
 
 
+def progress_bar(current, total, bar_length=30):
+    fraction = current / total
+    bar = int(fraction * bar_length) * '\u2588'
+    padding = int(bar_length - len(bar)) * ' '
+    ending = '\n' if current == total else '\r'
+    print(f'Progress: |{bar}{padding}| {int(fraction * 100)}% done', end=ending)
+
 def to_signed_short(val: int):
     """
     parses number to its signed representation
@@ -111,6 +118,7 @@ class BME280:
         return self.dict_meas
 
     def get_single_measurement(self):
+
         self.setup(mode='forced')
         # wait until measurement is made
         while self._is_measuring():  # wait for the end of measurement

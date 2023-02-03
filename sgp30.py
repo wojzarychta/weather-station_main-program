@@ -3,6 +3,13 @@ import math
 import time
 
 
+def progress_bar(current, total, bar_length=30):
+    fraction = current / total
+    bar = int(fraction * bar_length) * '\u2588'
+    padding = int(bar_length - len(bar)) * ' '
+    ending = '\n' if current == total else '\r'
+    print(f'Progress: |{bar}{padding}| {int(fraction * 100)}% done', end=ending)
+
 def calculate_absolute_humidity(rh: float, t: float):
     """
     function calculating absolute humidity based on RH [%] and temperature [DegC]
@@ -162,10 +169,14 @@ class SGP30:
         self._start_measurement()
         # self._set_absolute_humidity()  # optional
         start_time = time.time()
+        k = 0
+        progress_bar(k, 30)
         for i in range(15):  # during first 15sec sensor returns fixed values of 400 ppm CO2eq
             while time.time() - start_time < 1:  # sleep for 1 s
                 pass
             start_time = time.time()
+            k += 1
+            progress_bar(k, 30)
 
         for i in range(n):  # take average from n measurements
             meas = self._single_measurement()
@@ -174,16 +185,18 @@ class SGP30:
             while time.time() - start_time < 1:  # sleep for 1 s
                 pass
             start_time = time.time()
+            k += 1
+            progress_bar(k, 30)
 
         self.measurement["TVOC"] //= n
         self.measurement["CO2eq"] //= n
         self.measurement_ready = True
-        # self.print_measurement()  # pozniej usunac
+        self.print_measurement()  # pozniej usunac
         return self.measurement
 
     def print_measurement(self):
         if self.measurement_ready:
-            print('{}{:05.2f} ppb\n{}{:05.2f} ppm'.format("TVOC:", self.measurement["TVOC"],
+            print('{:<8}{} ppb\n{:<8}{} ppm'.format("TVOC:", self.measurement["TVOC"],
                                                           "CO2eq:", self.measurement["CO2eq"]))
         else:
             raise RuntimeWarning("There is no measurement to be printed")
