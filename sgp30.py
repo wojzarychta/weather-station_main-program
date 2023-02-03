@@ -158,22 +158,27 @@ class SGP30:
         function to measure air tvoc in ppb and CO2eq in ppm
         :return: dict with outputs
         """
+        n = 15  # number of measurements to take average from
         self._start_measurement()
         # self._set_absolute_humidity()  # optional
         start_time = time.time()
-        while True:
-            meas = self._single_measurement()
-            if meas[0] != 400 and meas[1] != 0:  # during first 15sec sensor returns fixed values of 400 ppm CO2eq
-                # and 0 ppb TVOC
-                break
-            time.sleep(1)
+        for i in range(15):  # during first 15sec sensor returns fixed values of 400 ppm CO2eq
             while time.time() - start_time < 1:  # sleep for 1 s
                 pass
             start_time = time.time()
-        self.measurement["TVOC"] = meas[1]
-        self.measurement["CO2eq"] = meas[0]
+
+        for i in range(n):  # take average from n measurements
+            meas = self._single_measurement()
+            self.measurement["TVOC"] += meas[1]
+            self.measurement["CO2eq"] += meas[0]
+            while time.time() - start_time < 1:  # sleep for 1 s
+                pass
+            start_time = time.time()
+
+        self.measurement["TVOC"] //= n
+        self.measurement["CO2eq"] //= n
         self.measurement_ready = True
-        self.print_measurement()  # pozniej usunac
+        # self.print_measurement()  # pozniej usunac
         return self.measurement
 
     def print_measurement(self):

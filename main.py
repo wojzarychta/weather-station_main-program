@@ -5,6 +5,7 @@ from sgp30 import *
 import serial
 import threading
 import time
+import struct
 
 
 def progress_bar(current, total, bar_length=30):
@@ -13,7 +14,6 @@ def progress_bar(current, total, bar_length=30):
     padding = int(bar_length - len(bar)) * ' '
     ending = '\n' if current == total else '\r'
     print(f'Progress: |{bar}{padding}| {int(fraction * 100)}% done', end=ending)
-
 
 def update_progress_bar(duration: int, bar_length=30):
     """
@@ -29,6 +29,15 @@ def update_progress_bar(duration: int, bar_length=30):
             pass
         start_time = time.time()
         progress_bar(i, duration, bar_length)
+
+def parse_number(buf: list) -> float:
+    """
+    parses number to float from fixed-point 24.8bit number
+    :param buf: list of 4 bytes
+    :return: float
+    """
+    integral = + ((buf[0] << 16) + (buf[1] << 8) + buf[2]) << 8
+    return (struct.unpack('<i', integral.to_bytes(4, 'little'))[0] >> 8) + buf[3] / 256
 
 
 if __name__ == '__main__':

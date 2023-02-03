@@ -110,18 +110,22 @@ class BME280:
 
         return self.dict_meas
 
-    def print_single_measurement(self):
-        """
-        performs single measurement in forced mode and prints results
-        :return: none
-        """
+    def get_single_measurement(self):
         self.setup(mode='forced')
         # wait until measurement is made
         while self._is_measuring():  # wait for the end of measurement
             sleep(0.001)
         self.change_sensor_mode('sleep')
-        meas = self.access_measurements()
-        print('{:05.2f} DegC {:05.2f} hPa {:05.2f}%'.format(meas['t'], meas['p'], meas['h']))
+        return self.access_measurements()
+
+    def print_single_measurement(self):
+        """
+        performs single measurement in forced mode and prints results
+        :return: none
+        """
+        meas = self.get_single_measurement()
+        print('{:<14}{:.2f} DegC\n{:<14}{:.2f} hPa\n{:<14}{:.2f}%'.format(
+            "Temperature", meas['t'], "Pressure",  meas['p'], "Humidity",  meas['h']))
 
     def continuous_measurement(self, frequency=1):
         """
@@ -132,10 +136,11 @@ class BME280:
         valid_f = {2000, 100, 50, 16, 8, 4, 2, 1}
         if frequency not in valid_f:
             raise ValueError("Wrong frequency")
-        self.setup(mode='normal', standby=1000 // frequency)
+        self.setup(mode='normal', standby=1000 / frequency)
         while True:
             meas = self.access_measurements()
-            print('{:05.2f} DegC {:05.2f} hPa {:05.2f}%'.format(meas['t'], meas['p'], meas['h']))
+            print('{:<14}{:.2f} DegC\n{:<14}{:.2f} hPa\n{:<14}{:.2f}%'.format(
+                "Temperature", meas['t'], "Pressure",  meas['p'], "Humidity",  meas['h']))
             sleep(1 / frequency)
 
     def change_sensor_mode(self, mode='normal'):
@@ -162,7 +167,7 @@ class BME280:
         :param t_oversampling: oversampling ratio of temperature data: {1, 2, 4, 8, 16}
         :param p_oversampling: oversampling ratio of pressure data: {1, 2, 4, 8, 16}
         :param h_oversampling: oversampling ratio of humidity data: {1, 2, 4, 8, 16}
-        :param standby: inactive duration time in normal mode
+        :param standby: inactive duration time in normal mode in ms: {0.5, 62.5, 125, 250, 500, 1000, 10, 20}
         :return: none
         """
         # check if device is connected
@@ -224,6 +229,15 @@ class BME280:
         self._i2c.write(self._ADDR, [0xF7])
         buf = self._i2c.read(self._ADDR, 8)
         return buf
+
+    def get_temperature(self):
+        return self.get_single_measurement()['t']
+
+    def get_humidity(self):
+        return self.self.get_single_measurement()['h']
+
+    def get_pressure(self):
+        return self.self.get_single_measurement()['p']
 
     def _compensate_temp(self, adc_t) -> float:
         """
